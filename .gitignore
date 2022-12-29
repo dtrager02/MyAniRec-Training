@@ -1,0 +1,6 @@
+*.feather
+*.inter
+*.csv
+*.7z
+__py*
+oldstuff/*

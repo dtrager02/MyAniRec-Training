@@ -1,0 +1,13 @@
+dataset: ml-100k
+model: RecVAE
+epochs: 20
+train_batch_size: 4096
+eval_batch_size: 4096
+eval_args:
+    group_by: user
+    order: LS
+    mode: full
+metrics: ['Recall', 'MRR', 'NDCG', 'Hit', 'Precision']
+topk: 10
+valid_metric: MRR@10
+metric_decimal_place: 4
