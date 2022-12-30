@@ -16,7 +16,7 @@ device = torch.device("cpu")
 
 if torch.cuda.is_available():  
    device = torch.device("cuda:0")
-
+print(device)
 
 train = pd.read_feather("data/train_processed.feather")
 test = pd.read_feather("data/test_processed.feather")
@@ -46,7 +46,7 @@ criterion = loss_function
 # Training code
 ###############################################################################
 
-def train(epochs,dataloader):
+def train(epochs,dataloader,optimizer,criterion):
    # Turn on training mode
    model.train()
    
@@ -76,7 +76,7 @@ def train(epochs,dataloader):
 
       # Save the model if the n100 is the best we've seen so far.
       if n100 > best_n100:
-         with open("best_multvae.pt", 'wb') as f:
+         with open("best_multvae.pt"+str(model.p_dims), 'wb') as f:
             torch.save(model, f)
          best_n100 = n100
    
@@ -123,7 +123,13 @@ def evaluate(model, valid_loader):
 
     return np.mean(n100_list), np.mean(r20_list), np.mean(r50_list),total_loss
 
-
+def gridsearch():
+   p_dims = [[i, i*3, n_items] for i in (100, 150, 200)]
+   for s in p_dims:
+      model = MultiVAE(s).to(device)
+      optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=0)
+      criterion = loss_function
+      train(25,train_loader,optimizer,criterion)
 # except KeyboardInterrupt:
 #     print('-' * 89)
 #     print('Exiting from training early')
@@ -139,4 +145,4 @@ def evaluate(model, valid_loader):
 #         'r50 {:4.2f}'.format(test_loss, n100, r20, r50))
 # print('=' * 89)
 
-train(epochs=100,dataloader=train_loader)
+train(25,train_loader,optimizer,criterion)

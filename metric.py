@@ -5,7 +5,7 @@ class Metric:
         self.actual = actual
         self.metrics = metrics
         if torch.cuda.is_available():
-            torch.set_default_tensor_type(torch.cuda.IntTensor)
+            torch.set_default_tensor_type(torch.cuda.FloatTensor)
         #Valid metrics: Hit rate, MRR, Recall, NDCG, 
         self.sorted_pred = torch.argsort(pred, dim=1, descending=True)
         
