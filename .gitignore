@@ -4,3 +4,4 @@
 *.7z
 __py*
 oldstuff/*
+*.pt
