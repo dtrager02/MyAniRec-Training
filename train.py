@@ -49,14 +49,14 @@ criterion = loss_function
 def train(epochs,dataloader):
    # Turn on training mode
    model.train()
-   train_loss = 0.0
-   start_time = time.time()
    
+   start_time = time.time()
    global update_count
    global best_n100
    # np.random.shuffle(idxlist)
    for epoch in range(1, epochs + 1):
-      for data in iter(tqdm(dataloader)):
+      train_loss = 0.0
+      for data in iter(tqdm(dataloader,position=0, leave=True)):
          if total_anneal_steps > 0:
              anneal = min(anneal_cap, 
                              1. * update_count / total_anneal_steps)
@@ -94,7 +94,7 @@ def evaluate(model, valid_loader):
     total_loss = 0.0
     metrics = Metric
     with torch.no_grad():
-         for data,heldout_data in iter(tqdm(valid_loader)):
+         for data,heldout_data in iter(tqdm(valid_loader,position=0, leave=True,mininterval=2.0,miniters=1)):
             if total_anneal_steps > 0:
                 anneal = min(anneal_cap, 
                                1. * update_count / total_anneal_steps)
