@@ -145,4 +145,4 @@ def gridsearch():
 #         'r50 {:4.2f}'.format(test_loss, n100, r20, r50))
 # print('=' * 89)
 
-train(25,train_loader,optimizer,criterion)
+gridsearch()
