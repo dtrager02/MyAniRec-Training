@@ -1,6 +1,6 @@
 import torch
 class Metric:
-    def __init__(self, pred:torch.tensor, actual:torch.tensor,metrics: list,k=[10,20]):
+    def __init__(self, pred:torch.tensor, actual:torch.tensor,metrics: list):
         self.pred = pred
         self.actual = actual
         self.metrics = metrics
@@ -8,7 +8,6 @@ class Metric:
             torch.set_default_tensor_type(torch.cuda.IntTensor)
         #Valid metrics: Hit rate, MRR, Recall, NDCG, 
         self.sorted_pred = torch.argsort(pred, dim=1, descending=True)
-        self.k = k
         
     @staticmethod
     def first_nonzero(a):
@@ -23,33 +22,39 @@ class Metric:
     def mrr(self):
         a = self.actual.gather(1,self.sorted_pred)
         nz = self.first_nonzero(a)+1 #+1 because the index starts from 0
-        
         return torch.sum(torch.ones_like(nz)/nz)/nz.size()[0]
     def ndcg(self,k):
         temp = self.actual.gather(1,self.sorted_pred[:,:k])
-        dcg = torch.sum(temp/torch.log2(torch.arange(2,k+2).unsqueeze(1)), dim=1)
+        dcg = torch.sum(temp/torch.log2(torch.arange(2,k+2)), dim=1)
         temp2 = torch.sort(self.actual, dim=1, descending=True).values[:,:k]
-        idcg = torch.sum(temp2/torch.log2(torch.arange(2,k+2).unsqueeze(1)), dim=1)
+        idcg = torch.sum(temp2/torch.log2(torch.arange(2,k+2)), dim=1)
         return torch.mean(dcg/idcg)
     def calculate(self):
         res = {}
         for metric in self.metrics:
-            if metric == 'hit_rate':
-                for k in self.k:
-                    res[metric+'@'+str(k)] = self.hit_rate(k)
-            elif metric == 'mrr':
-                res[metric] = self.mrr()
-            elif metric == 'recall':
-                res[metric] = self.recall()
-            elif metric == 'ndcg':
-                for k in self.k:
-                    res[metric+'@'+str(k)] = self.ndcg(k)
+            try:
+                metric, k = metric.split('@')
+                k = int(k)
+                if metric == 'hit_rate':
+                    res[metric+'@'+str(k)] = self.hit_rate(k).item()
+                elif metric == 'recall':
+                    res[metric+'@'+str(k)] = self.recall(k).item()
+                elif metric == 'ndcg':
+                    res[metric+'@'+str(k)] = self.ndcg(k).item()
+            except ValueError:
+                if metric == 'mrr':
+                    res[metric] = self.mrr().item()
+            
         return res
+    @staticmethod
+    def prettify(res):
+        out = " | ".join([f"{k}:{v:.4f}" for k,v in res.items()])
+        return out
     
 if __name__ == "__main__":
     actual = torch.tensor([[1, 0, 1,0,0], [0, 0, 1,0,0]])
     pred = torch.tensor([[0.1, 0.2, 0.3,.7,.1], [0.2, 0.1, 0.3,.5,.6]])
-    metrics = Metric(pred, actual, ['hit_rate', 'mrr','ndcg'], k=[1,2])
+    metrics = Metric(pred, actual, ['hit_rate@300', 'mrr','ndcg@3'])
     print(metrics.calculate())
 
     
