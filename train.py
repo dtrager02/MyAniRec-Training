@@ -31,11 +31,11 @@ print("Data loaded")
 ###############################################################################
 # Build the model
 ###############################################################################
-best_n100 = -np.inf
+
 anneal_cap = 0.2
 log_interval = 2
-update_count = 0
-total_anneal_steps = 200000
+
+total_anneal_steps = 10000
 p_dims = [128, 384, n_items]
 model = MultiVAE(p_dims).to(device)
 
@@ -46,13 +46,13 @@ criterion = loss_function
 # Training code
 ###############################################################################
 
-def train(epochs,dataloader,optimizer,criterion):
+def train(epochs,dataloader,optimizer,criterion,model):
    # Turn on training mode
    model.train()
    
    start_time = time.time()
-   global update_count
-   global best_n100
+   update_count = 0
+   best_n100 = -np.inf
    # np.random.shuffle(idxlist)
    for epoch in range(1, epochs + 1):
       train_loss = 0.0
@@ -124,12 +124,12 @@ def evaluate(model, valid_loader):
     return np.mean(n100_list), np.mean(r20_list), np.mean(r50_list),total_loss
 
 def gridsearch():
-   p_dims = [[i, i*3, n_items] for i in (100, 150, 200)]
+   p_dims = [[i, i*3, n_items] for i in (100, 80, 200)]
    for s in p_dims:
       model = MultiVAE(s).to(device)
       optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=0)
       criterion = loss_function
-      train(25,train_loader,optimizer,criterion)
+      train(22,train_loader,optimizer,criterion,model)
 # except KeyboardInterrupt:
 #     print('-' * 89)
 #     print('Exiting from training early')
