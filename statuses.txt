@@ -1,0 +1,6 @@
+1 = currently watching
+2 = completed
+3 = on hold
+4 = dropped
+5 = no status (worthless)
+6 = plan to watch

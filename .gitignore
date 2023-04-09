@@ -6,3 +6,5 @@ __py*
 oldstuff/*
 *.pt
 token.txt
+*.ipc
+best*.pt*

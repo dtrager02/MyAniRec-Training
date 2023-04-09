@@ -21,9 +21,9 @@ print(device)
 train = pd.read_feather("data/train_processed.feather")
 test = pd.read_feather("data/test_processed.feather")
 valid  = pd.read_feather("data/valid_processed.feather")
-train_loader = TrainDataloader(train,batch_size=4096,n_items=10175)
-test_loader = DataLoader(TestDataloader(test,batch_size=4096,n_items=10175))
-valid_loader = DataLoader(TestDataloader(valid,batch_size=4096,n_items=10175))
+train_loader = TrainDataloader(train,batch_size=2048,n_items=10175)
+test_loader = DataLoader(TestDataloader(test,batch_size=4096,n_items=10175,mode="80/20"))
+valid_loader = DataLoader(TestDataloader(valid,batch_size=4096,n_items=10175,mode="80/20"))
 n_items = train_loader.n_items
 train_loader = DataLoader(train_loader)
 # idxlist = list(range(N))
@@ -49,7 +49,7 @@ criterion = loss_function
 def train(epochs,dataloader,optimizer,criterion,model):
    # Turn on training mode
    model.train()
-   
+   total_anneal_steps = len(dataloader) * epochs*4
    start_time = time.time()
    update_count = 0
    best_n100 = -np.inf
@@ -57,6 +57,7 @@ def train(epochs,dataloader,optimizer,criterion,model):
    for epoch in range(1, epochs + 1):
       train_loss = 0.0
       for data in iter(tqdm(dataloader,position=0, leave=True)):
+         # print(data.shape,data[0].shape)
          if total_anneal_steps > 0:
              anneal = min(anneal_cap, 
                              1. * update_count / total_anneal_steps)
@@ -70,7 +71,7 @@ def train(epochs,dataloader,optimizer,criterion,model):
          train_loss += loss.item()
          optimizer.step()  
          update_count += 1
-      n100, r20, r50, loss = evaluate(model, valid_loader)
+      n100, r20, r50, loss = evaluate(model, valid_loader,anneal)
       tqdm.write('|epoch {:3d} |train loss {:4.2f} \n|valid loss {:4.2f}| ndcg@100 {:.4f} | hit rate@20 {:.4f} | hit rate@50 {:.4f}|'
                  .format(epoch,train_loss,loss,n100,r20,r50))
 
@@ -78,14 +79,15 @@ def train(epochs,dataloader,optimizer,criterion,model):
       if n100 > best_n100:
          with open("best_multvae.pt"+str(model.p_dims), 'wb') as f:
             torch.save(model, f)
+            tqdm.write("Saving model (new best validation n100)")
          best_n100 = n100
    
-   n100, r20, r50, test_loss = evaluate(model, test_loader)
+   n100, r20, r50, test_loss = evaluate(model, test_loader,anneal)
    tqdm.write('|test loss {:4.2f} | ndcg@100 {:.4f} | hit rate@20 {:.4f} | hit rate@50 {:.4f}|'
                  .format(test_loss,n100,r20,r50))
 
 
-def evaluate(model, valid_loader):
+def evaluate(model, valid_loader,anneal):
     # Turn on evaluation mode
     model.eval()
     n100_list = []
@@ -95,12 +97,6 @@ def evaluate(model, valid_loader):
     metrics = Metric
     with torch.no_grad():
          for data,heldout_data in iter(tqdm(valid_loader,position=0, leave=True,mininterval=2.0,miniters=1)):
-            if total_anneal_steps > 0:
-                anneal = min(anneal_cap, 
-                               1. * update_count / total_anneal_steps)
-            else:
-                anneal = anneal_cap
-
             recon_batch, mu, logvar = model(data[0])
 
             loss = criterion(recon_batch, data[0], mu, logvar, anneal)
@@ -124,15 +120,16 @@ def evaluate(model, valid_loader):
     return np.mean(n100_list), np.mean(r20_list), np.mean(r50_list),total_loss
 
 def gridsearch():
-   p_dims = [[i, i*3, n_items] for i in (100, 80, 200)]
+   p_dims = [[i, i*3, n_items] for i in (100, 250, 200)]
    for s in p_dims:
       model = MultiVAE(s).to(device)
-      optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=0)
+      # print(model)
+      optimizer = optim.Adam(model.parameters(), lr=3e-4, weight_decay=0)
       criterion = loss_function
-      train(22,train_loader,optimizer,criterion,model)
+      train(18,train_loader,optimizer,criterion,model)
 # except KeyboardInterrupt:
 #     print('-' * 89)
-#     print('Exiting from training early')
+#     print('Exiting from training early')2212998.10 1490240.58
 
 # # Load the best saved model.
 # with open(args.save, 'rb') as f:
@@ -145,4 +142,6 @@ def gridsearch():
 #         'r50 {:4.2f}'.format(test_loss, n100, r20, r50))
 # print('=' * 89)
 
+
+#|test loss 35761.34 | ndcg@100 0.1376 | hit rate@20 0.2072 | hit rate@50 0.3446|
 gridsearch()

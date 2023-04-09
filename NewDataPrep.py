@@ -5,10 +5,10 @@ import pandas as pd
 
 class TestDataloader(Dataset):
 
-    def __init__(self,data,batch_size=4096,n_items=None):
+    def __init__(self,data,batch_size=4096,n_items=None,mode="LOO"):
         self.batch_size = batch_size
         self.device = torch.device("cpu")
-
+        self.mode = mode
         if torch.cuda.is_available():  
           self.device = torch.device("cuda:0")
           torch.set_default_tensor_type('torch.cuda.FloatTensor')
@@ -45,9 +45,14 @@ class TestDataloader(Dataset):
         data['username'] = data['username'].map(mapper)
         data[data['score'] > 0].loc[:,"score"] = 1
         #get the last rating for each user
-        last_ones = data.groupby("username",sort=False)["timestamp"].transform(pd.Series.max)
-        last_ones_df = data[data['timestamp']==last_ones]
-        data = data[data['timestamp']!=last_ones]
+        if self.mode == "LOO":
+            last_ones = data.groupby("username",sort=False)["timestamp"].transform(pd.Series.max)
+            last_ones_df = data[data['timestamp']==last_ones]
+            data = data[data['timestamp']!=last_ones]
+        elif self.mode == "80/20":
+            last_ones = data.groupby("username",sort=False)["timestamp"].transform(pd.Series.quantile,0.8)
+            last_ones_df = data[data['timestamp']>=last_ones]
+            data = data[data['timestamp']<last_ones]
         last_ones = last_ones_df.to_numpy()
         data = data.to_numpy()
         #create a torch sparse tensor with rows as usernames and columns as item ids
@@ -87,7 +92,7 @@ class TrainDataloader(Dataset):
         a = torch.index_select(self.sparse_ratings2,0,indices)
         a = a.to_dense()
         if idx == self.__len__()-1:
-            # print("shuffling users in train")
+            print("shuffling users in train")
             self.row_order = np.arange(self.n_users)
             np.random.shuffle(self.row_order)
             self.row_order = torch.tensor(self.row_order,device=self.device,dtype=torch.int64)
