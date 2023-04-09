@@ -1,7 +1,7 @@
 import polars as pl
-
+from time import perf_counter
 # Load the dataset
-
+start = perf_counter()
 df = pl.read_ipc("ratings_ipc.ipc")
 
 # Filter out ratings with status less than 1 or greater than 5
@@ -15,6 +15,14 @@ item_counts = df.groupby("anime_id").agg(pl.count("user").alias("item_rating_cou
 items_with_300_or_more_ratings = item_counts.filter(item_counts["item_rating_count"] >= 300)
 
 df = df.join(items_with_300_or_more_ratings, left_on="anime_id", right_on="anime_id", how="inner")
+# df = df.with_columns(
+#     [
+#         pl.col("user").count().over("anime_id").alias("item_rating_count")
+#     ]
+# ).filter(pl.col("item_rating_count") >= 300)
+
+
+print(df)
 # Filter out users with less than 6 ratings
 
 user_counts = df.groupby("user").agg(pl.count("anime_id").alias("rating_count"))
@@ -87,6 +95,6 @@ df = (
 )
 
 df = df.drop("user_median_score", "rating_count", "item_rating_count", "quantile_25")
+print(perf_counter() - start)
 print(df)
-print(df.filter(df["username"] == 0))
-df.write_ipc("ratings_ipc_processed.ipc")
+# df.write_ipc("ratings_ipc_processed.ipc")

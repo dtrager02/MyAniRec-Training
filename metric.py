@@ -1,8 +1,9 @@
 import torch
 class Metric:
-    def __init__(self, pred:torch.tensor, actual:torch.tensor,metrics: list):
+    def __init__(self, pred:torch.Tensor, actual:torch.Tensor,bad_actual:torch.Tensor,metrics: list):
         self.pred = pred
         self.actual = actual
+        self.bad_actual = bad_actual
         self.metrics = metrics
         if torch.cuda.is_available():
             torch.set_default_tensor_type(torch.cuda.FloatTensor)
@@ -15,20 +16,39 @@ class Metric:
         mask = (a != 0).to(torch.int32)
         return mask.argmax(1).unsqueeze(1)
         
-    def hit_rate(self,k):
+    def hit_rate(self,k,extra:torch.Tensor=None):
         # print(self.actual[self.sorted_pred[:,:k].unsqueeze(2)])
         # print(torch.sum(self.actual[:,self.sorted_pred[:,:k]], dim=1))
+        if extra:
+            return torch.count_nonzero(torch.sum(extra.gather(1,self.sorted_pred[:,:k]), dim=1))/extra.size()[0]
         return torch.count_nonzero(torch.sum(self.actual.gather(1,self.sorted_pred[:,:k]), dim=1))/self.actual.size()[0]
+    
+    def bin_hit_rate(self,k):
+        #positives
+        pos = self.hit_rate(k)
+        #negatives
+        neg = self.hit_rate(k,self.bad_actual)
+        return torch.mean(pos-neg)
     def mrr(self):
         a = self.actual.gather(1,self.sorted_pred)
         nz = self.first_nonzero(a)+1 #+1 because the index starts from 0
         return torch.sum(torch.ones_like(nz)/nz)/nz.size()[0]
-    def ndcg(self,k):
-        temp = self.actual.gather(1,self.sorted_pred[:,:k])
+    def ndcg(self,k,extra:torch.Tensor=None):
+        if extra:
+            arr = extra
+        else:
+            arr = self.actual
+        temp = arr.gather(1,self.sorted_pred[:,:k])
         dcg = torch.sum(temp/torch.log2(torch.arange(2,k+2)), dim=1)
-        temp2 = torch.sort(self.actual, dim=1, descending=True).values[:,:k]
+        temp2 = torch.sort(arr, dim=1, descending=True).values[:,:k]
         idcg = torch.sum(temp2/torch.log2(torch.arange(2,k+2)), dim=1)
         return torch.mean(dcg/idcg)
+    def bi_ndcg(self,k):
+        #positives
+        pos = self.ndcg(k)
+        #negatives
+        neg = self.ndcg(k,self.bad_actual)
+        return torch.mean(pos-neg)
     def calculate(self):
         res = {}
         for metric in self.metrics:
@@ -52,9 +72,9 @@ class Metric:
         return out
     
 if __name__ == "__main__":
-    actual = torch.tensor([[1, 0, 1,0,0], [0, 0, 1,0,0]])
+    actual = torch.tensor([[1, 0, 1,1,0], [0, 0, 1,0,1]])
     pred = torch.tensor([[0.1, 0.2, 0.3,.7,.1], [0.2, 0.1, 0.3,.5,.6]])
-    metrics = Metric(pred, actual, ['hit_rate@300', 'mrr','ndcg@3'])
+    metrics = Metric(pred, actual, ['hit_rate@3', 'mrr','ndcg@3'])
     print(metrics.calculate())
 
     
