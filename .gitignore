@@ -8,3 +8,8 @@ oldstuff/*
 token.txt
 *.ipc
 best*.pt*
+wandb/*
+data/*
+.vscode/*
+setup.ipynb
+recommendertest*

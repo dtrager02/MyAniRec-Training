@@ -1,0 +1,24 @@
+program: train_wab.py
+project: recsys
+method: bayes
+metric:
+  name: val_ncdg
+  goal: maximize
+parameters:
+  layer1:
+    values: [400,500,600,700]
+  layer2:
+    values: [200,250,300,400]
+  dropout:
+    min: .3
+    max: .5
+  lr: 
+    value: 0.001
+  architecture: 
+    value: MULTVAE+-
+  batch_size: 
+    value: 3000
+  dataset: 
+    value: MAL
+  epochs: 
+    value: 20

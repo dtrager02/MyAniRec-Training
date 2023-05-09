@@ -9,6 +9,29 @@ from NewDataPrep import *
 from metric import *
 from model import MultiVAE,loss_function
 from torch.utils.data import DataLoader
+import wandb
+import random
+
+###############################################################################
+# Weights and Biases
+###############################################################################
+lr = 0.001
+batch_size = 2048
+epochs = 20
+wandb.init(
+    # set the wandb project where this run will be logged
+    project="my-awesome-project",
+    
+    # track hyperparameters and run metadata
+    config={
+    "learning_rate": lr,
+    "architecture": "MULTVAE+",
+    "batch_size": batch_size,
+    "dataset": "MAL",
+    "epochs": 20,
+    }
+)
+
 ###############################################################################
 # Load data
 ###############################################################################
@@ -50,13 +73,17 @@ def train(epochs,dataloader,optimizer,criterion,model):
    # Turn on training mode
    model.train()
    total_anneal_steps = len(dataloader) * epochs*4
-   start_time = time.time()
    update_count = 0
    best_n100 = -np.inf
    # np.random.shuffle(idxlist)
+   positives,negative = torch.zeros((batch_size,n_items),device=device),torch.zeros((batch_size,n_items),device=device)
    for epoch in range(1, epochs + 1):
       train_loss = 0.0
       for data in iter(tqdm(dataloader,position=0, leave=True)):
+         positives.zero_()
+         negative.zero_()
+         positives[data==1] = 1
+         negative[data==-1] = 1
          # print(data.shape,data[0].shape)
          if total_anneal_steps > 0:
              anneal = min(anneal_cap, 
@@ -64,16 +91,16 @@ def train(epochs,dataloader,optimizer,criterion,model):
          else:
              anneal = anneal_cap 
          optimizer.zero_grad()
-         recon_batch, mu, logvar = model(data[0])
+         recon_batch, mu, logvar = model(data)
 
-         loss = criterion(recon_batch, data[0], mu, logvar, anneal)
+         loss = criterion(recon_batch, data, mu, logvar, anneal)
          loss.backward()
          train_loss += loss.item()
          optimizer.step()  
          update_count += 1
-      n100, r20, r50, loss = evaluate(model, valid_loader,anneal)
-      tqdm.write('|epoch {:3d} |train loss {:4.2f} \n|valid loss {:4.2f}| ndcg@100 {:.4f} | hit rate@20 {:.4f} | hit rate@50 {:.4f}|'
-                 .format(epoch,train_loss,loss,n100,r20,r50))
+      n100, r20, r50, val_loss = evaluate(model, valid_loader,anneal)
+      # tqdm.write('|epoch {:3d} |train loss {:4.2f} \n|valid loss {:4.2f}| ndcg@100 {:.4f} | hit rate@20 {:.4f} | hit rate@50 {:.4f}|'
+      #            .format(epoch,train_loss,loss,n100,r20,r50))
 
       # Save the model if the n100 is the best we've seen so far.
       if n100 > best_n100:
@@ -82,7 +109,7 @@ def train(epochs,dataloader,optimizer,criterion,model):
             tqdm.write("Saving model (new best validation n100)")
          best_n100 = n100
    
-   n100, r20, r50, test_loss = evaluate(model, test_loader,anneal)
+   metrics = evaluate(model, test_loader,anneal)
    tqdm.write('|test loss {:4.2f} | ndcg@100 {:.4f} | hit rate@20 {:.4f} | hit rate@50 {:.4f}|'
                  .format(test_loss,n100,r20,r50))
 
@@ -106,7 +133,7 @@ def evaluate(model, valid_loader,anneal):
             b = data[0].nonzero()
             recon_batch[b[:,0],b[:,1]] = -torch.inf
             
-            metrics = Metric(recon_batch, heldout_data[0], ["ndcg@100", "hit_rate@20", "hit_rate@50"])
+            metrics = Metric(recon_batch, heldout_data[0], ["ndcg@100","" ,"hit_rate@20", "hit_rate@50"])
             res = metrics.calculate()
 
             n100_list.append(res['ndcg@100'])
@@ -145,3 +172,4 @@ def gridsearch():
 
 #|test loss 35761.34 | ndcg@100 0.1376 | hit rate@20 0.2072 | hit rate@50 0.3446|
 gridsearch()
+wandb.finish()

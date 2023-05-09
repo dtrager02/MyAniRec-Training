@@ -22,7 +22,6 @@ df = df.join(items_with_300_or_more_ratings, left_on="anime_id", right_on="anime
 # ).filter(pl.col("item_rating_count") >= 300)
 
 
-print(df)
 # Filter out users with less than 6 ratings
 
 user_counts = df.groupby("user").agg(pl.count("anime_id").alias("rating_count"))
@@ -40,29 +39,9 @@ users_with_quantile_non_zero = user_quantiles.filter((user_quantiles["quantile_2
 
 df = df.join(users_with_quantile_non_zero, left_on="user", right_on="user", how="inner")
 
-# Replace users with a unique number for each user
-
-unique_usernames = df["user"].unique(maintain_order=True)
-
-username_mapping = pl.DataFrame({
-
-    "user": unique_usernames,
-
-    "username": range(len(unique_usernames))
-
-})
-
-# Merge the dataset with the username mapping
-
-df = df.join(username_mapping, on="user", how="left")
-
-# Drop the "username" column
-
-df = df.drop("user")
-
 median_scores = (
 
-    df.groupby("username")
+    df.groupby("user")
 
     .agg(pl.col("score").alias("user_median_score").median())
 
@@ -70,7 +49,7 @@ median_scores = (
 
 # Join the median scores with the original dataset
 
-data_with_median = df.join(median_scores, on="username", how="left")
+data_with_median = df.join(median_scores, on="user", how="left")
 
 # Add the train_id column based on the conditions
 
@@ -93,8 +72,28 @@ df = (
     )
 
 )
+# Replace users with a unique number for each user
+
+unique_usernames = df["user"].unique(maintain_order=True)
+
+username_mapping = pl.DataFrame({
+
+    "user": unique_usernames,
+
+    "username": range(len(unique_usernames))
+
+})
+
+# Merge the dataset with the username mapping
+
+df = df.join(username_mapping, on="user", how="left")
+
+# Drop the "username" column
+
+df = df.drop("user")
 
 df = df.drop("user_median_score", "rating_count", "item_rating_count", "quantile_25")
+
 print(perf_counter() - start)
 print(df)
-# df.write_ipc("ratings_ipc_processed.ipc")
+df.write_ipc("ratings_ipc_processed.ipc")
