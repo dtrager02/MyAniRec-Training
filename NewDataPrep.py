@@ -2,9 +2,9 @@ import torch
 from torch.utils.data import Dataset
 import numpy as np
 import pandas as pd
-
+from tqdm import tqdm
 class GeneralDataLoader(Dataset):
-    def __init__(self,data,batch_size=4096,n_items=None,mode="LOO"):
+    def __init__(self,data,batch_size=4096,n_items=None,mode="LOO",side_info= None):
         self.batch_size = batch_size
         self.device = torch.device("cpu")
         self.mode = mode
@@ -14,14 +14,33 @@ class GeneralDataLoader(Dataset):
         if n_items is not None:
             self.n_items = n_items
         else:
-            self.n_items = None
+            self.n_items = data.loc[:,'anime_id'].max()
+        #create code to reindex the username column
+        mapper = dict(zip(data['username'].unique(),[*range(data['username'].nunique())]))
+        data.loc[:,'username'] = data.loc[:,'username'].map(mapper)
+        self.side_info = side_info
+        if side_info is not None: 
+            self.side_info.loc[:,'username'] = self.side_info.loc[:,'username'].map(mapper)
+            self.side_info.set_index("username",inplace=True)
+            self.side_info = self.side_info/self.side_info.max() #normalize
+        del mapper
+        self.n_users = data.loc[:,'username'].max()+1
+        
+        #set negative feedback to -1 instead of 0
+        data.loc[data['train_id'] == 0,'train_id'] = -1
+        
         self.sparse_ratings2,self.sparse_ratings3 = self.get_dataset(data)
         self.row_order = np.arange(self.n_users)
         np.random.shuffle(self.row_order)
         self.row_order = torch.tensor(self.row_order,device=self.device,dtype=torch.int64)
         # self.row_order = torch.tensor(self.row_order,device=self.device)
+        
+    def get_side_info(self,indices):
+        arr = self.side_info.loc[indices.cpu(),:].values
+        return torch.tensor(arr,device=self.device,dtype=torch.float32)
+    
     def __len__(self):
-        return self.n_users//self.batch_size
+        return self.n_users//self.batch_size-1 #-1 is for index out of bounds errors
 
     def __getitem__(self, idx):
         raise NotImplementedError
@@ -31,24 +50,25 @@ class GeneralDataLoader(Dataset):
 
 class TestDataloader(GeneralDataLoader):
  
-    def __init__(self, data, batch_size, n_items=None,mode = "LOO"):
-        super().__init__(data, batch_size,n_items=n_items,mode=mode)
+    def __init__(self, data, batch_size, n_items=None,mode = "LOO",side_info=None):
+        super().__init__(data, batch_size,n_items=n_items,mode=mode,side_info=side_info)
         
     def __getitem__(self, idx):
         #shuffle if train and on last batch
         if idx == self.__len__():
             raise StopIteration
         indices = self.row_order[idx*self.batch_size:idx*self.batch_size+self.batch_size]
-        a = torch.index_select(self.sparse_ratings2,0,indices) #self.sparse_ratings2[indices]
-        a = a.to_dense()
-        b = torch.index_select(self.sparse_ratings3,0,indices)
-        b = b.to_dense()
-        return a,b
+        if self.side_info is not None:
+            side_info = self.get_side_info(indices)
+        else:
+            side_info = None
+        a_ = torch.index_select(self.sparse_ratings2,0,indices) #self.sparse_ratings2[indices]
+        a = a_.to_dense()
+        b_ = torch.index_select(self.sparse_ratings3,0,indices)
+        b = b_.to_dense()
+        return a,b,side_info
     
     def get_dataset(self,data:pd.DataFrame):   
-        #create code to reindex the username column and make a two sparse matrices implimenting the leave one out split strategy 
-        self.n_users = data.loc[:,'username'].max()+1
-        data.loc[data['train_id'] == 0,'train_id'] = -1
         last_ones_df = pd.DataFrame()
         #get the last rating for each user
         if self.mode == "LOO":
@@ -62,9 +82,7 @@ class TestDataloader(GeneralDataLoader):
         # last_ones = last_ones_df.to_numpy()
         # data = data.to_numpy()
         #create a torch sparse tensor with rows as usernames and columns as item ids
-
-        if self.n_items is None:
-            self.n_items = data.loc[:,'anime_id'].max()
+        
         sparse_ratings2 = torch.sparse_coo_tensor(torch.tensor(data.loc[:,["username","anime_id"]].values.T),\
             torch.tensor(data.loc[:,["train_id"]].values.flatten()),size=(self.n_users,self.n_items),dtype=torch.float32,device="cpu").coalesce().to(self.device)
         sparse_ratings3 = torch.sparse_coo_tensor(torch.tensor(last_ones_df.loc[:,["username","anime_id"]].values.T),\
@@ -75,33 +93,32 @@ class TestDataloader(GeneralDataLoader):
 class TrainDataloader(GeneralDataLoader):
 
 
-    def __init__(self, data, batch_size, n_items=None):
-        super().__init__(data, batch_size,n_items=n_items,mode=None)
+    def __init__(self, data, batch_size, n_items=None,side_info=None):
+        super().__init__(data, batch_size,n_items=n_items,mode=None,side_info=side_info)
   
     def __getitem__(self, idx):
         #shuffle if train and on last batch
         if idx == self.__len__():
-            # print("shuffling users in train")
+            # tqdm.write("shuffling users in train")
             self.row_order = np.arange(self.n_users)
             np.random.shuffle(self.row_order)
             self.row_order = torch.tensor(self.row_order,device=self.device,dtype=torch.int64)
             raise StopIteration
         indices = self.row_order[idx*self.batch_size:idx*self.batch_size+self.batch_size]
-        a = torch.index_select(self.sparse_ratings2,0,indices)
-        a = a.to_dense()
-        return a
+        if self.side_info is not None:
+            side_info = self.get_side_info(indices)
+        else:
+            side_info = None
+        a_ = torch.index_select(self.sparse_ratings2,0,indices)
+        a = a_.to_dense()
+        return a,side_info
     
 
     
     def get_dataset(self,data:pd.DataFrame):   
-        #create code to reindex the username column and make a two sparse matrices implimenting the leave one out split strategy 
-        self.n_users = data.loc[:,'username'].max()+1
-        data.loc[data['train_id'] == 0,'train_id'] = -1
         # last_ones = last_ones_df.to_numpy()
         # data = data.to_numpy()
         #create a torch sparse tensor with rows as usernames and columns as item ids
-        if self.n_items is None:
-            self.n_items = data.loc[:,'anime_id'].max()
         sparse_ratings2 = torch.sparse_coo_tensor(torch.tensor(data.loc[:,["username","anime_id"]].values.T),\
             torch.tensor(data.loc[:,["train_id"]].values.flatten()),size=(self.n_users,self.n_items),dtype=torch.float32,device="cpu").coalesce().to(self.device)
         print("Sparse tensor created, shape = ",sparse_ratings2.size())

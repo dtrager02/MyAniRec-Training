@@ -80,9 +80,9 @@ class Metric:
 if __name__ == "__main__":
     actual = torch.tensor([[1, 0, 1,0,0], [0, 0, 1,0,1]])
     bad = torch.zeros_like(actual)
-    bad[0,-2] = 1
+    bad[0,0] = 1
     pred = torch.tensor([[0.1, 0.2, 0.3,.7,.1], [0.2, 0.1, 0.3,.5,.6]])
-    metrics = Metric(pred, actual, bad,['hit_rate@3', 'mrr','ndcg@1','bi_hit_rate@3','bi_ndcg@1'])
+    metrics = Metric(pred, actual, bad,['hit_rate@3', 'mrr','ndcg@3','bi_hit_rate@3','bi_ndcg@3'])
     print(metrics.calculate())
 
     

@@ -18,7 +18,7 @@ print(train['train_id'].value_counts())
 # print(train[train.duplicated(subset=["user","anime_id"],keep=False)].sort_values(by=["user","anime_id"]))
 # print(train.loc[:,["train_id"]].values.flatten())
 # print(train.loc[:,["username","anime_id"]].values.T.shape)
-train_loader = TestDataloader(train,batch_size=5,mode="80/20",n_items=10661)
+train_loader = TestDataloader(train,batch_size=3000,mode="80/20",n_items=10661)
 
 print(len(train_loader))
 # a = next(iterator).to("cpu")#.type(torch.int64) + 1

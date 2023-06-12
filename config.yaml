@@ -2,23 +2,26 @@ program: train_wab.py
 project: recsys
 method: bayes
 metric:
-  name: val_ncdg
+  name: validation bi_ndcg@100
   goal: maximize
 parameters:
   layer1:
-    values: [400,500,600,700]
+    values: [500,600,700,800]
   layer2:
-    values: [200,250,300,400]
+    values: [250,300,350]
   dropout:
     min: .3
     max: .5
   lr: 
-    value: 0.001
+    value: 0.0005
   architecture: 
-    value: MULTVAE+-
+    value: MULTVAE+-v3
   batch_size: 
-    value: 3000
+    value: 3500
   dataset: 
     value: MAL
   epochs: 
     value: 20
+  anneal_cap:
+    min: .15
+    max: .3
